@@ -6,9 +6,12 @@ __pycache__/
 *.pyc
 
 data/
+logs/
+*.log
 
 # Env / Secrets
 .env
+*.env
 
 # VS Code
 .vscode/
