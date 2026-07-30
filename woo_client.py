@@ -1,52 +1,92 @@
 import requests
 from requests.auth import HTTPBasicAuth
-from config import (
-    WOO_BASE_URL,
-    WOO_CONSUMER_KEY,
-    WOO_CONSUMER_SECRET,
-    REQUEST_TIMEOUT,
-    PRODUCTS_PER_PAGE,
-    ORDERS_PER_PAGE,
-)
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
+
+from logging_config import setup_logger
+
+logger = setup_logger()
 
 
-def _validate_config():
-    if not WOO_BASE_URL:
-        raise ValueError("Missing WOO_BASE_URL in .env")
-    if not WOO_CONSUMER_KEY:
-        raise ValueError("Missing WOO_CONSUMER_KEY in .env")
-    if not WOO_CONSUMER_SECRET:
-        raise ValueError("Missing WOO_CONSUMER_SECRET in .env")
+class WooClient:
+    def __init__(self, config):
+        self.config = config
+        self.session = self._create_session()
 
+        logger.info("WooClient initialized | base_url=%s", self.config.base_url)
 
-def _get(endpoint, params=None):
-    _validate_config()
+    def _create_session(self):
+        session = requests.Session()
+        session.auth = HTTPBasicAuth(
+            self.config.consumer_key,
+            self.config.consumer_secret
+        )
 
-    url = f"{WOO_BASE_URL}/wp-json/wc/v3/{endpoint}"
+        retry_strategy = Retry(
+            total=3,
+            connect=3,
+            read=3,
+            backoff_factor=1,
+            status_forcelist=[429, 500, 502, 503, 504],
+            allowed_methods=["GET"]
+        )
 
-    response = requests.get(
-        url,
-        auth=HTTPBasicAuth(WOO_CONSUMER_KEY, WOO_CONSUMER_SECRET),
-        params=params,
-        timeout=REQUEST_TIMEOUT,
-    )
-    response.raise_for_status()
-    return response.json()
+        adapter = HTTPAdapter(max_retries=retry_strategy)
+        session.mount("https://", adapter)
+        session.mount("http://", adapter)
 
+        return session
 
-def get_products(per_page=PRODUCTS_PER_PAGE, page=1):
-    return _get("products", params={"per_page": per_page, "page": page})
+    def _build_url(self, endpoint):
+        return f"{self.config.base_url}/wp-json/wc/v3/{endpoint}"
 
+    def get(self, endpoint, params=None):
+        url = self._build_url(endpoint)
+        params = params or {}
 
-def get_orders(per_page=ORDERS_PER_PAGE, page=1, status=None):
-    params = {"per_page": per_page, "page": page}
+        logger.info("GET started | endpoint=%s | params=%s", endpoint, params)
 
-    if status:
-        params["status"] = status
+        try:
+            response = self.session.get(
+                url,
+                params=params,
+                timeout=self.config.request_timeout
+            )
+            response.raise_for_status()
 
-    return _get("orders", params=params)
+            logger.info(
+                "GET succeeded | endpoint=%s | status_code=%s",
+                endpoint,
+                response.status_code
+            )
+            return response.json()
 
+        except requests.exceptions.Timeout:
+            logger.exception(
+                "Timeout error | endpoint=%s | timeout=%s",
+                endpoint,
+                self.config.request_timeout
+            )
+            raise
 
-def test_connection():
-    products = get_products(per_page=1)
-    return len(products)
+        except requests.exceptions.ConnectionError:
+            logger.exception("Connection error | endpoint=%s", endpoint)
+            raise
+
+        except requests.exceptions.HTTPError:
+            logger.exception(
+                "HTTP error | endpoint=%s | status_code=%s",
+                endpoint,
+                getattr(response, "status_code", "unknown")
+            )
+            raise
+
+        except Exception:
+            logger.exception("Unexpected error | endpoint=%s", endpoint)
+            raise
+
+    def test_connection(self):
+        logger.info("Testing API connection")
+        products = self.get("products", params={"per_page": 1, "page": 1})
+        logger.info("API connection test passed | rows=%s", len(products))
+        return len(products)
