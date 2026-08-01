@@ -1,3 +1,7 @@
+from datetime import datetime
+from pathlib import Path
+import pandas as pd
+
 from pipelines.base_pipeline import BasePipeline, logger
 
 
@@ -47,63 +51,106 @@ class OrdersPipeline(BasePipeline):
         logger.info("Extract finished | entity=orders | total_rows=%s", len(self.raw_data))
 
     def transform(self):
-    logger.info("Transform started | entity=orders | input_rows=%s", len(self.raw_data))
+        logger.info("Transform started | entity=orders | input_rows=%s", len(self.raw_data))
 
-    self.cleaned_data = []
-    self.line_items_data = []
+        self.cleaned_data = []
+        self.line_items_data = []
 
-    for row in self.raw_data:
-        self.cleaned_data.append({
-            "id": row.get("id"),
-            "status": row.get("status"),
-            "currency": row.get("currency"),
-            "date_created": row.get("date_created"),
-            "date_modified": row.get("date_modified"),
-            "discount_total": row.get("discount_total"),
-            "shipping_total": row.get("shipping_total"),
-            "total": row.get("total"),
-            "customer_id": row.get("customer_id"),
-            "payment_method": row.get("payment_method"),
-            "payment_method_title": row.get("payment_method_title"),
-        })
-
-        for item in row.get("line_items", []):
-            self.line_items_data.append({
-                "order_id": row.get("id"),
-                "order_date_created": row.get("date_created"),
-                "order_date_modified": row.get("date_modified"),
-                "customer_id": row.get("customer_id"),
-                "order_status": row.get("status"),
+        for row in self.raw_data:
+            self.cleaned_data.append({
+                "id": row.get("id"),
+                "status": row.get("status"),
                 "currency": row.get("currency"),
-
-                "line_item_id": item.get("id"),
-                "product_id": item.get("product_id"),
-                "variation_id": item.get("variation_id"),
-                "name": item.get("name"),
-                "sku": item.get("sku"),
-                "quantity": item.get("quantity"),
-                "price": item.get("price"),
-                "subtotal": item.get("subtotal"),
-                "subtotal_tax": item.get("subtotal_tax"),
-                "total": item.get("total"),
-                "total_tax": item.get("total_tax"),
-                "tax_class": item.get("tax_class"),
+                "date_created": row.get("date_created"),
+                "date_modified": row.get("date_modified"),
+                "discount_total": row.get("discount_total"),
+                "shipping_total": row.get("shipping_total"),
+                "total": row.get("total"),
+                "customer_id": row.get("customer_id"),
+                "payment_method": row.get("payment_method"),
+                "payment_method_title": row.get("payment_method_title"),
             })
 
-    if self.cleaned_data:
-        max_modified = max(
-            (
-                row.get("date_modified")
-                for row in self.cleaned_data
-                if row.get("date_modified")
-            ),
-            default=None
-        )
-        if max_modified:
-            self.save_watermark(max_modified)
+            for item in row.get("line_items", []):
+                self.line_items_data.append({
+                    "order_id": row.get("id"),
+                    "order_date_created": row.get("date_created"),
+                    "order_date_modified": row.get("date_modified"),
+                    "customer_id": row.get("customer_id"),
+                    "order_status": row.get("status"),
+                    "currency": row.get("currency"),
+                    "line_item_id": item.get("id"),
+                    "product_id": item.get("product_id"),
+                    "variation_id": item.get("variation_id"),
+                    "name": item.get("name"),
+                    "sku": item.get("sku"),
+                    "quantity": item.get("quantity"),
+                    "price": item.get("price"),
+                    "subtotal": item.get("subtotal"),
+                    "subtotal_tax": item.get("subtotal_tax"),
+                    "total": item.get("total"),
+                    "total_tax": item.get("total_tax"),
+                    "tax_class": item.get("tax_class"),
+                })
 
-    logger.info(
-        "Transform finished | entity=orders | output_rows=%s | line_items_rows=%s",
-        len(self.cleaned_data),
-        len(self.line_items_data)
-    )
+        if self.cleaned_data:
+            max_modified = max(
+                (
+                    row.get("date_modified")
+                    for row in self.cleaned_data
+                    if row.get("date_modified")
+                ),
+                default=None
+            )
+            if max_modified:
+                self.save_watermark(max_modified)
+
+        logger.info(
+            "Transform finished | entity=orders | output_rows=%s | line_items_rows=%s",
+            len(self.cleaned_data),
+            len(self.line_items_data)
+        )
+
+    def load(self):
+        super().load()
+
+        line_items_df = pd.DataFrame(self.line_items_data)
+
+        if line_items_df.empty:
+            logger.warning("No line items to save | entity=orders")
+            return
+
+        timestamp = datetime.now().strftime("%Y-%m-%d_%H%M%S")
+
+        raw_dir = Path("data/raw/line_items")
+        curated_dir = Path("data/curated/line_items")
+
+        raw_dir.mkdir(parents=True, exist_ok=True)
+        curated_dir.mkdir(parents=True, exist_ok=True)
+
+        raw_csv = raw_dir / f"line_items_{timestamp}.csv"
+        latest_csv = curated_dir / "line_items_latest.csv"
+
+        line_items_df.to_csv(raw_csv, index=False, encoding="utf-8-sig")
+        line_items_df.to_csv(latest_csv, index=False, encoding="utf-8-sig")
+
+        logger.info(
+            "Line items CSV files saved | raw=%s | latest=%s | rows=%s",
+            raw_csv,
+            latest_csv,
+            len(line_items_df)
+        )
+
+        if getattr(self.config, "save_excel", False):
+            raw_xlsx = raw_dir / f"line_items_{timestamp}.xlsx"
+            latest_xlsx = curated_dir / "line_items_latest.xlsx"
+
+            line_items_df.to_excel(raw_xlsx, index=False)
+            line_items_df.to_excel(latest_xlsx, index=False)
+
+            logger.info(
+                "Line items Excel files saved | raw=%s | latest=%s | rows=%s",
+                raw_xlsx,
+                latest_xlsx,
+                len(line_items_df)
+            )
