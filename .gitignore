@@ -8,6 +8,7 @@ __pycache__/
 data/
 logs/
 *.log
+BU/
 
 # Env / Secrets
 .env
