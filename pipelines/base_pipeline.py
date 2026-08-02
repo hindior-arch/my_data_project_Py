@@ -34,10 +34,20 @@ class BasePipeline:
             logger.warning("Watermark file not found | entity=%s", self.entity_name)
             return None
 
-        with open(self.state_file, "r", encoding="utf-8") as f:
-            state = json.load(f)
+        try:
+            with open(self.state_file, "r", encoding="utf-8-sig") as f:
+                content = f.read().strip()
 
-        return state.get("last_modified")
+            if not content:
+                logger.warning("Watermark file is empty | entity=%s | file=%s", self.entity_name, self.state_file)
+                return None
+
+            state = json.loads(content)
+            return state.get("last_modified")
+
+        except json.JSONDecodeError:
+            logger.warning("Invalid watermark JSON | entity=%s | file=%s", self.entity_name, self.state_file)
+            return None
 
     def save_watermark(self, value):
         with open(self.state_file, "w", encoding="utf-8") as f:
@@ -54,26 +64,27 @@ class BasePipeline:
     def load(self):
         logger.info("Load started | entity=%s | rows=%s", self.entity_name, len(self.cleaned_data))
 
-        if not self.cleaned_data:
-            logger.warning("No new data to save | entity=%s", self.entity_name)
+        df = pd.DataFrame(self.cleaned_data)
+
+        if df.empty:
+            logger.warning("No data to save | entity=%s", self.entity_name)
             return
 
-        df = pd.DataFrame(self.cleaned_data)
-        run_ts = datetime.now().strftime("%Y-%m-%d_%H%M%S")
+        timestamp = datetime.now().strftime("%Y-%m-%d_%H%M%S")
 
-        raw_csv = self.raw_dir / f"{self.entity_name}_{run_ts}.csv"
-        latest_csv = self.curated_dir / f"{self.entity_name}_latest.csv"
+        raw_dir = Path("data/raw") / self.entity_name
+        curated_dir = Path("data/curated") / self.entity_name
 
-        df.to_csv(raw_csv, index=False, encoding="utf-8-sig")
+        raw_dir.mkdir(parents=True, exist_ok=True)
+        curated_dir.mkdir(parents=True, exist_ok=True)
+
+        latest_csv = curated_dir / f"{self.entity_name}_latest.csv"
+        save_raw_history = getattr(self, "save_raw_history", True)
+
+        if save_raw_history:
+            raw_csv = raw_dir / f"{self.entity_name}_{timestamp}.csv"
+            df.to_csv(raw_csv, index=False, encoding="utf-8-sig")
+            logger.info("Raw CSV saved | entity=%s | path=%s", self.entity_name, raw_csv)
+
         df.to_csv(latest_csv, index=False, encoding="utf-8-sig")
-
-        logger.info("CSV files saved | entity=%s | raw=%s | latest=%s", self.entity_name, raw_csv, latest_csv)
-
-        if self.config.save_excel:
-            raw_xlsx = self.raw_dir / f"{self.entity_name}_{run_ts}.xlsx"
-            latest_xlsx = self.curated_dir / f"{self.entity_name}_latest.xlsx"
-
-            df.to_excel(raw_xlsx, index=False)
-            df.to_excel(latest_xlsx, index=False)
-
-            logger.info("Excel files saved | entity=%s | raw=%s | latest=%s", self.entity_name, raw_xlsx, latest_xlsx)
+        logger.info("Latest CSV saved | entity=%s | path=%s", self.entity_name, latest_csv)
