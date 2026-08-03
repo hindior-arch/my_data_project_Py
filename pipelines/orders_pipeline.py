@@ -140,17 +140,4 @@ class OrdersPipeline(BasePipeline):
             latest_csv,
             len(line_items_df)
         )
-
-        if getattr(self.config, "save_excel", False):
-            raw_xlsx = raw_dir / f"line_items_{timestamp}.xlsx"
-            latest_xlsx = curated_dir / "line_items_latest.xlsx"
-
-            line_items_df.to_excel(raw_xlsx, index=False)
-            line_items_df.to_excel(latest_xlsx, index=False)
-
-            logger.info(
-                "Line items Excel files saved | raw=%s | latest=%s | rows=%s",
-                raw_xlsx,
-                latest_xlsx,
-                len(line_items_df)
-            )
+        

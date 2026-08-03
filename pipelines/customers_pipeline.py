@@ -1,4 +1,10 @@
 from pipelines.base_pipeline import BasePipeline, logger
+from transforms.privacy import (
+    mask_email,
+    mask_phone,
+    mask_name,
+    mask_address,
+)
 
 
 class CustomersPipeline(BasePipeline):
@@ -17,23 +23,27 @@ class CustomersPipeline(BasePipeline):
                 "page": page,
                 "orderby": "id",
                 "order": "asc",
+                "role": "all",
             }
 
             rows = self.client.get("customers", params=params)
-            logger.info("Customers API returned | page=%s | rows=%s", page, len(rows) if rows else 0)
 
             if not rows:
+                logger.info("No data returned | entity=customers | page=%s", page)
                 break
 
-            all_rows.extend(rows)
+            row_count = len(rows)
 
             logger.info(
                 "Page processed | entity=customers | page=%s | rows=%s",
                 page,
-                len(rows)
+                row_count
             )
 
-            if len(rows) < self.per_page:
+            all_rows.extend(rows)
+
+            if row_count < self.per_page:
+                logger.info("Last page reached | entity=customers | page=%s", page)
                 break
 
             page += 1
@@ -44,32 +54,41 @@ class CustomersPipeline(BasePipeline):
     def transform(self):
         logger.info("Transform started | entity=customers | input_rows=%s", len(self.raw_data))
 
-        self.cleaned_data = []
-
-        for row in self.raw_data:
-            billing = row.get("billing", {}) or row.get("billing_address", {})
-            shipping = row.get("shipping", {}) or row.get("shipping_address", {})
-
-            self.cleaned_data.append({
+        self.cleaned_data = [
+            {
                 "id": row.get("id"),
-                "email": row.get("email"),
-                "first_name": row.get("first_name"),
-                "last_name": row.get("last_name"),
-                "username": row.get("username"),
                 "date_created": row.get("date_created"),
+                "date_modified": row.get("date_modified"),
+                "email": mask_email(row.get("email")),
+                "first_name": mask_name(row.get("first_name")),
+                "last_name": mask_name(row.get("last_name")),
+                "role": row.get("role"),
+                "username": row.get("username"),
+                "is_paying_customer": row.get("is_paying_customer"),
 
-                "billing_first_name": billing.get("first_name"),
-                "billing_last_name": billing.get("last_name"),
-                "billing_company": billing.get("company"),
-                "billing_address_1": billing.get("address_1"),
-                "billing_address_2": billing.get("address_2"),
-                "billing_city": billing.get("city"),
-                "billing_state": billing.get("state"),
-                "billing_postcode": billing.get("postcode"),
-                "billing_country": billing.get("country"),
-                "billing_email": billing.get("email"),
-                "billing_phone": billing.get("phone"),
+                "billing_first_name": mask_name((row.get("billing") or {}).get("first_name")),
+                "billing_last_name": mask_name((row.get("billing") or {}).get("last_name")),
+                "billing_company": (row.get("billing") or {}).get("company"),
+                "billing_address_1": mask_address((row.get("billing") or {}).get("address_1")),
+                "billing_address_2": mask_address((row.get("billing") or {}).get("address_2")),
+                "billing_city": (row.get("billing") or {}).get("city"),
+                "billing_state": (row.get("billing") or {}).get("state"),
+                "billing_postcode": (row.get("billing") or {}).get("postcode"),
+                "billing_country": (row.get("billing") or {}).get("country"),
+                # "billing_email": mask_email((row.get("billing") or {}).get("email")),
+                "billing_phone": mask_phone((row.get("billing") or {}).get("phone")),
 
-            })
+                "shipping_first_name": mask_name((row.get("shipping") or {}).get("first_name")),
+                "shipping_last_name": mask_name((row.get("shipping") or {}).get("last_name")),
+                "shipping_company": (row.get("shipping") or {}).get("company"),
+                "shipping_address_1": mask_address((row.get("shipping") or {}).get("address_1")),
+                "shipping_address_2": mask_address((row.get("shipping") or {}).get("address_2")),
+                "shipping_city": (row.get("shipping") or {}).get("city"),
+                "shipping_state": (row.get("shipping") or {}).get("state"),
+                "shipping_postcode": (row.get("shipping") or {}).get("postcode"),
+                "shipping_country": (row.get("shipping") or {}).get("country"),
+            }
+            for row in self.raw_data
+        ]
 
         logger.info("Transform finished | entity=customers | output_rows=%s", len(self.cleaned_data))

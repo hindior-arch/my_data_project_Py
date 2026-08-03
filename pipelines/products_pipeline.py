@@ -69,16 +69,4 @@ class ProductsPipeline(BasePipeline):
             for row in self.raw_data
         ]
 
-        if self.cleaned_data:
-            max_modified = max(
-                (
-                    row.get("date_modified")
-                    for row in self.cleaned_data
-                    if row.get("date_modified")
-                ),
-                default=None
-            )
-            if max_modified:
-                self.save_watermark(max_modified)
-
         logger.info("Transform finished | entity=products | output_rows=%s", len(self.cleaned_data))
