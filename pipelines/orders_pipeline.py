@@ -13,7 +13,7 @@ class OrdersPipeline(BasePipeline):
         logger.info("Extract started | entity=orders")
 
         page = 1
-        watermark = self.get_last_watermark()
+        # ללא watermark - full load
         all_rows = []
 
         while True:
@@ -28,21 +28,17 @@ class OrdersPipeline(BasePipeline):
             if not rows:
                 break
 
-            original_count = len(rows)
-
-            if watermark:
-                rows = [row for row in rows if row.get("date_modified", "") > watermark]
+            row_count = len(rows)
 
             logger.info(
-                "Page processed | entity=orders | page=%s | before=%s | after=%s",
+                "Page processed | entity=orders | page=%s | rows=%s",
                 page,
-                original_count,
-                len(rows)
+                row_count
             )
 
             all_rows.extend(rows)
 
-            if original_count < self.per_page:
+            if row_count < self.per_page:
                 break
 
             page += 1
@@ -93,18 +89,7 @@ class OrdersPipeline(BasePipeline):
                     "tax_class": item.get("tax_class"),
                 })
 
-        if self.cleaned_data:
-            max_modified = max(
-                (
-                    row.get("date_modified")
-                    for row in self.cleaned_data
-                    if row.get("date_modified")
-                ),
-                default=None
-            )
-            if max_modified:
-                self.save_watermark(max_modified)
-
+        # לא שומרים watermark ב-full load
         logger.info(
             "Transform finished | entity=orders | output_rows=%s | line_items_rows=%s",
             len(self.cleaned_data),
@@ -112,32 +97,59 @@ class OrdersPipeline(BasePipeline):
         )
 
     def load(self):
-        super().load()
+        logger.info("Load started | entity=%s | rows=%s", self.entity_name, len(self.cleaned_data))
 
+        orders_df = pd.DataFrame(self.cleaned_data)
         line_items_df = pd.DataFrame(self.line_items_data)
 
-        if line_items_df.empty:
-            logger.warning("No line items to save | entity=orders")
+        if orders_df.empty:
+            logger.warning("No orders to save | entity=%s", self.entity_name)
             return
+
+        # הוספת עמודת זמן טעינה
+        now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        orders_df["extracted_at"] = now_str
+        if not line_items_df.empty:
+            line_items_df["extracted_at"] = now_str
 
         timestamp = datetime.now().strftime("%Y-%m-%d_%H%M%S")
 
-        raw_dir = Path("data/raw/line_items")
-        curated_dir = Path("data/curated/line_items")
+        
+        # תיקיות נפרדות ל-orders ו-line_items
+        orders_raw_dir = Path("data/raw") / "orders"
+        line_items_raw_dir = Path("data/raw") / "line_items"
+        curated_dir = Path("data/curated") / self.entity_name
 
-        raw_dir.mkdir(parents=True, exist_ok=True)
+        orders_raw_dir.mkdir(parents=True, exist_ok=True)
+        line_items_raw_dir.mkdir(parents=True, exist_ok=True)
         curated_dir.mkdir(parents=True, exist_ok=True)
 
-        raw_csv = raw_dir / f"line_items_{timestamp}.csv"
-        latest_csv = curated_dir / "line_items_latest.csv"
+        save_raw_history = getattr(self, "save_raw_history", True)
 
-        line_items_df.to_csv(raw_csv, index=False, encoding="utf-8-sig")
-        line_items_df.to_csv(latest_csv, index=False, encoding="utf-8-sig")
+        # --- היסטוריה (אם רוצים) ---
+        if save_raw_history:
+            # orders
+            raw_csv = raw_dir / f"{self.entity_name}_{timestamp}.csv"
+            orders_df.to_csv(raw_csv, index=False, encoding="utf-8-sig")
+            logger.info("Raw orders CSV saved | path=%s", raw_csv)
 
-        logger.info(
-            "Line items CSV files saved | raw=%s | latest=%s | rows=%s",
-            raw_csv,
-            latest_csv,
-            len(line_items_df)
-        )
-        
+            # line_items
+            line_items_raw_csv = raw_dir / f"line_items_{timestamp}.csv"
+            line_items_df.to_csv(line_items_raw_csv, index=False, encoding="utf-8-sig")
+            logger.info("Raw line items CSV saved | path=%s", line_items_raw_csv)
+
+        # --- קבצים מתעדכנים (latest raw) ---
+        # orders_raw.csv
+        orders_raw_csv = raw_dir / f"{self.entity_name}_raw.csv"
+        orders_df.to_csv(orders_raw_csv, index=False, encoding="utf-8-sig")
+        logger.info("Orders raw latest CSV saved | path=%s", orders_raw_csv)
+
+        # line_items_raw.csv
+        line_items_raw_csv = raw_dir / "line_items_raw.csv"
+        line_items_df.to_csv(line_items_raw_csv, index=False, encoding="utf-8-sig")
+        logger.info("Line items raw latest CSV saved | path=%s", line_items_raw_csv)
+
+        # --- curated (orders_latest.csv) ---
+        latest_csv = curated_dir / f"{self.entity_name}_latest.csv"
+        orders_df.to_csv(latest_csv, index=False, encoding="utf-8-sig")
+        logger.info("Latest orders CSV saved | path=%s", latest_csv)

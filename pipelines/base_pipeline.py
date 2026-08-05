@@ -1,6 +1,6 @@
 import json
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone
 import pandas as pd
 
 from logging_config import setup_logger
@@ -70,6 +70,10 @@ class BasePipeline:
             logger.warning("No data to save | entity=%s", self.entity_name)
             return
 
+        # הוספת עמודת זמן טעינה
+        now_str = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+        df["extracted_at"] = now_str
+
         timestamp = datetime.now().strftime("%Y-%m-%d_%H%M%S")
 
         raw_dir = Path("data/raw") / self.entity_name
@@ -85,6 +89,11 @@ class BasePipeline:
             raw_csv = raw_dir / f"{self.entity_name}_{timestamp}.csv"
             df.to_csv(raw_csv, index=False, encoding="utf-8-sig")
             logger.info("Raw CSV saved | entity=%s | path=%s", self.entity_name, raw_csv)
+
+        # קובץ raw קבוע שמתעדכן בכל ריצה (לא בתוך ה-if)
+        raw_latest_csv = raw_dir / f"{self.entity_name}_raw.csv"
+        df.to_csv(raw_latest_csv, index=False, encoding="utf-8-sig")
+        logger.info("Raw latest CSV saved | entity=%s | path=%s", self.entity_name, raw_latest_csv)
 
         df.to_csv(latest_csv, index=False, encoding="utf-8-sig")
         logger.info("Latest CSV saved | entity=%s | path=%s", self.entity_name, latest_csv)
