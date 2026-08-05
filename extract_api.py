@@ -20,7 +20,7 @@ def run_pipeline(pipeline):
     logger.info("Pipeline finished | entity=%s", pipeline.entity_name)
 
 
-def main():
+def extract_api():
     print("main() started")
     logger.info("Application started")
 
@@ -53,4 +53,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    extract_api()

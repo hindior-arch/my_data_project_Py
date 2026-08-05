@@ -77,16 +77,7 @@ class CustomersPipeline(BasePipeline):
                 "billing_country": (row.get("billing") or {}).get("country"),
                 # "billing_email": mask_email((row.get("billing") or {}).get("email")),
                 "billing_phone": mask_phone((row.get("billing") or {}).get("phone")),
-
-                "shipping_first_name": mask_name((row.get("shipping") or {}).get("first_name")),
-                "shipping_last_name": mask_name((row.get("shipping") or {}).get("last_name")),
-                "shipping_company": (row.get("shipping") or {}).get("company"),
-                "shipping_address_1": mask_address((row.get("shipping") or {}).get("address_1")),
-                "shipping_address_2": mask_address((row.get("shipping") or {}).get("address_2")),
-                "shipping_city": (row.get("shipping") or {}).get("city"),
-                "shipping_state": (row.get("shipping") or {}).get("state"),
-                "shipping_postcode": (row.get("shipping") or {}).get("postcode"),
-                "shipping_country": (row.get("shipping") or {}).get("country"),
+            
             }
             for row in self.raw_data
         ]

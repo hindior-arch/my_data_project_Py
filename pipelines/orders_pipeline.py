@@ -60,7 +60,6 @@ class OrdersPipeline(BasePipeline):
                 "date_created": row.get("date_created"),
                 "date_modified": row.get("date_modified"),
                 "discount_total": row.get("discount_total"),
-                "shipping_total": row.get("shipping_total"),
                 "total": row.get("total"),
                 "customer_id": row.get("customer_id"),
                 "payment_method": row.get("payment_method"),
@@ -78,15 +77,12 @@ class OrdersPipeline(BasePipeline):
                     "line_item_id": item.get("id"),
                     "product_id": item.get("product_id"),
                     "variation_id": item.get("variation_id"),
-                    "name": item.get("name"),
-                    "sku": item.get("sku"),
+                    "name": item.get("name"),                   
                     "quantity": item.get("quantity"),
                     "price": item.get("price"),
                     "subtotal": item.get("subtotal"),
                     "subtotal_tax": item.get("subtotal_tax"),
                     "total": item.get("total"),
-                    "total_tax": item.get("total_tax"),
-                    "tax_class": item.get("tax_class"),
                 })
 
         # לא שומרים watermark ב-full load
@@ -114,7 +110,6 @@ class OrdersPipeline(BasePipeline):
 
         timestamp = datetime.now().strftime("%Y-%m-%d_%H%M%S")
 
-        
         # תיקיות נפרדות ל-orders ו-line_items
         orders_raw_dir = Path("data/raw") / "orders"
         line_items_raw_dir = Path("data/raw") / "line_items"
@@ -129,27 +124,42 @@ class OrdersPipeline(BasePipeline):
         # --- היסטוריה (אם רוצים) ---
         if save_raw_history:
             # orders
-            raw_csv = raw_dir / f"{self.entity_name}_{timestamp}.csv"
+            raw_csv = orders_raw_dir / f"{self.entity_name}_{timestamp}.csv"
             orders_df.to_csv(raw_csv, index=False, encoding="utf-8-sig")
             logger.info("Raw orders CSV saved | path=%s", raw_csv)
 
             # line_items
-            line_items_raw_csv = raw_dir / f"line_items_{timestamp}.csv"
+            line_items_raw_csv = line_items_raw_dir / f"line_items_{timestamp}.csv"
             line_items_df.to_csv(line_items_raw_csv, index=False, encoding="utf-8-sig")
             logger.info("Raw line items CSV saved | path=%s", line_items_raw_csv)
 
         # --- קבצים מתעדכנים (latest raw) ---
         # orders_raw.csv
-        orders_raw_csv = raw_dir / f"{self.entity_name}_raw.csv"
+        orders_raw_csv = orders_raw_dir / "orders_raw.csv"
         orders_df.to_csv(orders_raw_csv, index=False, encoding="utf-8-sig")
         logger.info("Orders raw latest CSV saved | path=%s", orders_raw_csv)
 
         # line_items_raw.csv
-        line_items_raw_csv = raw_dir / "line_items_raw.csv"
+        line_items_raw_csv = line_items_raw_dir / "line_items_raw.csv"
         line_items_df.to_csv(line_items_raw_csv, index=False, encoding="utf-8-sig")
         logger.info("Line items raw latest CSV saved | path=%s", line_items_raw_csv)
 
         # --- curated (orders_latest.csv) ---
-        latest_csv = curated_dir / f"{self.entity_name}_latest.csv"
-        orders_df.to_csv(latest_csv, index=False, encoding="utf-8-sig")
-        logger.info("Latest orders CSV saved | path=%s", latest_csv)
+        orders_curated_dir = Path("data/curated") / "orders"
+        orders_curated_dir.mkdir(parents=True, exist_ok=True)
+
+        orders_latest_csv = orders_curated_dir / "orders_latest.csv"
+        orders_df.to_csv(orders_latest_csv, index=False, encoding="utf-8-sig")
+        logger.info("Latest orders CSV saved | path=%s", orders_latest_csv)
+
+        # --- curated (line_items_latest.csv) ---
+        line_items_curated_dir = Path("data/curated") / "line_items"
+        line_items_curated_dir.mkdir(parents=True, exist_ok=True)
+
+        line_items_latest_csv = line_items_curated_dir / "line_items_latest.csv"
+        line_items_df.to_csv(line_items_latest_csv, index=False, encoding="utf-8-sig")
+        logger.info("Latest line items CSV saved | path=%s", line_items_latest_csv)
+
+        
+
+     
