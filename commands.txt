@@ -1,0 +1,7 @@
+Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned      # access to virtual env.
+.\.venv\Scripts\Activate.ps1  # Run virtual env.
+python extract_api.py                   ==> connect to api and saves files in raw folder and save file to folder log  as woo_pipeline.txt. Masking data on customers
+python .\validations\raw_checks.py      ==> checks validation of files and save log to file s validations_raw
+python .\pipelines\curated_pipeline.py ==> clean the data from raw folder and save curated folder and saves log to folder logs as raw_to_curated_log.csv
+python .\pipelines\gold_pipeline.py    ==> create new file facttable with join and save in folder gold.
+python .\validations\gold_checks.py     ==> checks validations of file facttable vs raws files and save logs to logs folder as file gold_log.csv

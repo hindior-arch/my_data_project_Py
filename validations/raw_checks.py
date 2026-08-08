@@ -94,17 +94,33 @@ def run_all_raw_checks():
                 date_col = None
 
             if date_col and date_col in df.columns:
-                df[date_col] = pd.to_datetime(df[date_col], errors="coerce")
+                df[date_col] = pd.to_datetime(
+                    df[date_col],
+                    errors="coerce",
+                    utc=True,
+                )
+
                 max_date = df[date_col].max()
                 min_date = df[date_col].min()
 
-                max_allowed = pd.Timestamp("2026-08-06")
-                min_allowed = pd.Timestamp("2019-06-01")
+                min_allowed = pd.Timestamp(
+                    "2019-06-01",
+                    tz="UTC",
+                )
+
+                # מאפשר את כל היום הנוכחי
+                max_allowed = (
+                    pd.Timestamp.now(tz="UTC").normalize()
+                    + pd.Timedelta(days=1)
+                )
 
                 if pd.notna(max_date) and (
-                    max_date > max_allowed or min_date < min_allowed
+                    max_date >= max_allowed
+                    or min_date < min_allowed
                 ):
                     date_range_status = "invalid"
+
+                date_created = max_date
 
             # --- בדיקת טווחי ערכים (measures) ---
             measures_status = "valid"
