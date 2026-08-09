@@ -113,11 +113,11 @@ class OrdersPipeline(BasePipeline):
         # תיקיות נפרדות ל-orders ו-line_items
         orders_raw_dir = Path("data/raw") / "orders"
         line_items_raw_dir = Path("data/raw") / "line_items"
-        curated_dir = Path("data/curated") / self.entity_name
+        #curated_dir = Path("data/curated") / self.entity_name
 
         orders_raw_dir.mkdir(parents=True, exist_ok=True)
         line_items_raw_dir.mkdir(parents=True, exist_ok=True)
-        curated_dir.mkdir(parents=True, exist_ok=True)
+        #curated_dir.mkdir(parents=True, exist_ok=True)
 
         save_raw_history = getattr(self, "save_raw_history", True)
 
